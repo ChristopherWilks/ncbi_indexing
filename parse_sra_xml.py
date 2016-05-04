@@ -3,18 +3,21 @@ import sys
 import re 
 import lxml.etree as xparser
 import gzip
+import glob
 
 import lucene
 from org.apache.lucene.document import Document, Field, IntField, StringField, TextField
 
 from lucene_indexer import LuceneIndexer
 
+fields_seen = set(['all','raw'])
+
 #attributes to parse:
 identifiers = {'PRIMARY_ID':1,'SUBMITTER_ID':1,'EXTERNAL_ID':1}
 elements = {'EXPERIMENT':{'attrs':set(['alias','accession']),'TITLE':1,'DESIGN_DESCRIPTION':1,'LIBRARY_DESCRIPTOR':2,'LIBRARY_CONSTRUCTION_PROTOCOL':1,'INSTRUMENT_MODEL':1,'EXPERIMENT_ATTRIBUTES':2},'SUBMISSION':{'attrs':set([]),'TITLE':1},'STUDY':{'attrs':set(['alias','accession']),'STUDY_TITLE':1,'STUDY_ABSTRACT':1},'SAMPLE':{'attrs':set(['alias','accession']),'TITLE':1,'DESCRIPTION':1,'SAMPLE_ATTRIBUTES':2}}
 
 def print_doc(fields,header,accession):
-  print("Accession:")
+  print("Accession %s:" % (accession))
   for (idx,field) in enumerate(fields):
     print("\t%s:%s:%s" % (field,header[idx][0],header[idx][1]))
 
@@ -38,14 +41,19 @@ def process_sub_children(sub_e,fields,header,top_e):
         #actaully only add these to the first field which is all the attributes concatenated by spaces
         fields[0].append("%s:%s" % (child[0].text,child[1].text))
     elif child.text != None:
-      header.append(["%s_%s" % (top_e,child.tag),TextField])
+      fieldname = "%s_%s" % (top_e,child.tag)
+      header.append([fieldname,TextField])
+      if fieldname not in fields_seen: 
+        fields_seen.add(fieldname)
       fields.append(child.text)
       fields[0].append(child.text)
-      
+
+#TODO: parse RUNs (especially SRRs)
 #parse one EXPERIMENT_PACKAGE section (one document in lucene)
-def parse_exp(exp_xml):
+def parse_exp(exp_xml,li):
   fields = [[]]
   header = [['all',TextField]]
+  accessions = set()
   accession = 'NA'
   for (top_e,subs) in elements.iteritems():
     e = exp_xml.find(top_e)
@@ -55,9 +63,16 @@ def parse_exp(exp_xml):
       if k == 'attrs':
         for attr_ in v:
           attr = e.get(attr_)
+          if attr_ == 'accession':
+            accessions.add(attr)
+            if top_e == 'EXPERIMENT':
+              accession = attr 
           if attr != None:
             fields.append(attr)
-            header.append(["%s_%s" % (top_e,attr_),StringField])
+            fieldname = "%s_%s" % (top_e,attr_)
+            header.append([fieldname,StringField])
+            if fieldname not in fields_seen: 
+              fields_seen.add(fieldname)
             fields[0].append(attr)
       else:
           sube = e.find(".//%s" % k)
@@ -65,27 +80,36 @@ def parse_exp(exp_xml):
             continue
           if v == 2:
             process_sub_children(sube,fields,header,top_e)
-          #TODO fix attributes processing
           elif sube.text != None:
             fields.append(sube.text)
-            header.append(["%s_%s" % (top_e,sube.text),TextField])
+            fieldname = "%s_%s" % (top_e,sube.tag)
+            header.append([fieldname,TextField])
+            if fieldname not in fields_seen: 
+              fields_seen.add(fieldname)
             fields[0].append(sube.text)
+
   fields.append(xparser.tostring(exp_xml))
   header.append(['raw',TextField])
   if len(fields) > 0:
     fields[0] = ' '.join(fields[0])
-  print_doc(fields,header,accession)
-  #li.add_document(fields,header,accession)
+  #print_doc(fields,header,accession)
+  print("adding_document\t%s\t%s" % (accession,";".join(sorted(accessions))))
+  li.add_document(fields,header,accession)
           
-def parse_sra_chunk(xml):
+def parse_sra_chunk(xml,li):
   root = xparser.fromstring(xml)
   exps = root.findall('EXPERIMENT_PACKAGE')
   for exp in exps:
-    parse_exp(exp) 
+    parse_exp(exp,li) 
 
 if __name__ == '__main__':
-  f = sys.argv[1]
-  #li = LuceneIndexer("./lucene_sra_index")
-  with gzip.open(f,"r") as fin:
-    xml = fin.read()
-    parse_sra_chunk(xml) 
+  li = LuceneIndexer("./lucene_sra_index")
+  files_ = glob.glob('*.gz')
+  for f in files_:
+    #f = sys.argv[1]
+    with gzip.open(f,"r") as fin:
+      xml = fin.read()
+      parse_sra_chunk(xml,li)
+  li.close()
+  for fieldname in fields_seen:
+    sys.stdout.write("%s\n" % (fieldname)) 
