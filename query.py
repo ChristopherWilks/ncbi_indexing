@@ -32,7 +32,7 @@ lucene.initVM()
 analyzer = StandardAnalyzer(Version.LUCENE_4_10_1)
 analyzer2 = WhitespaceAnalyzer(Version.LUCENE_4_10_1)
 
-pubmed = IndexReader.open(SimpleFSDirectory(File("./lucene_index2")))
+pubmed = IndexReader.open(SimpleFSDirectory(File("./lucene_pubmed_index")))
 sra = IndexReader.open(SimpleFSDirectory(File("./lucene_sra_index")))
 psearcher = IndexSearcher(pubmed)
 ssearcher = IndexSearcher(sra)
