@@ -26,6 +26,8 @@ import parse_abstracts
 pubmed_field_set = set()
 [pubmed_field_set.add(x[0]) for x in parse_abstracts.HEADER]
 
+sym2name={0:'PubMed',1:'SRA','+':'BooleanClause.Occur.MUST'}
+
 sra_field_set = set(["all","raw","SAMPLE_alias","SAMPLE_DESCRIPTION","SUBMISSION_TITLE","EXPERIMENT_INSTRUMENT_MODEL","STUDY_alias","STUDY_STUDY_ABSTRACT","SAMPLE_accession","EXPERIMENT_LIBRARY_STRATEGY","EXPERIMENT_alias","EXPERIMENT_TITLE","EXPERIMENT_LIBRARY_NAME","EXPERIMENT_DESIGN_DESCRIPTION","EXPERIMENT_LIBRARY_SELECTION","SAMPLE_TITLE","STUDY_accession","EXPERIMENT_LIBRARY_SOURCE","EXPERIMENT_LIBRARY_CONSTRUCTION_PROTOCOL","STUDY_STUDY_TITLE","EXPERIMENT_accession"])
 
 lucene.initVM()
@@ -47,7 +49,7 @@ def search_lucene(fields_,terms_,requirements_,searcher,index=0):
     terms.append(x[index])
     fields.append(fields_[i][index])
     requirements.append(requirements_[i][index])
-  sys.stderr.write("Running query index %d: %s in %s restricted to %s\n" % (index,",".join(terms),",".join(fields),",".join([str(x) for x in requirements])))
+  sys.stderr.write("Running query %s: (\"%s\") in fields (%s) with requirements (%s)\n" % (sym2name[index],"\",\"".join(terms),",".join(fields),",".join([sym2name[str(x)] for x in requirements])))
   query = MultiFieldQueryParser.parse(Version.LUCENE_4_10_1,terms,fields,requirements,analyzer2)
   return(searcher.search(query, NUM_TO_RETRIEVE))
 
