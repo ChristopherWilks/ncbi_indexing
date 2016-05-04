@@ -22,11 +22,11 @@ from org.apache.lucene.store import SimpleFSDirectory
 from org.apache.lucene.util import Version
 
 import parse_abstracts
+#HEADER = [['journal_t',TextField],['title_s',StringField],['authors_t',TextField],['author_info_t',TextField],['abstract_t',TextField],['pmid_s',StringField]]
 pubmed_field_set = set()
 [pubmed_field_set.add(x[0]) for x in parse_abstracts.HEADER]
 
-#TODO fillout known sra field set
-sra_field_set = set(['all','raw'])
+sra_field_set = set(["all","raw","SAMPLE_alias","SAMPLE_DESCRIPTION","SUBMISSION_TITLE","EXPERIMENT_INSTRUMENT_MODEL","STUDY_alias","STUDY_STUDY_ABSTRACT","SAMPLE_accession","EXPERIMENT_LIBRARY_STRATEGY","EXPERIMENT_alias","EXPERIMENT_TITLE","EXPERIMENT_LIBRARY_NAME","EXPERIMENT_DESIGN_DESCRIPTION","EXPERIMENT_LIBRARY_SELECTION","SAMPLE_TITLE","STUDY_accession","EXPERIMENT_LIBRARY_SOURCE","EXPERIMENT_LIBRARY_CONSTRUCTION_PROTOCOL","STUDY_STUDY_TITLE","EXPERIMENT_accession"])
 
 lucene.initVM()
 analyzer = StandardAnalyzer(Version.LUCENE_4_10_1)
@@ -39,15 +39,15 @@ ssearcher = IndexSearcher(sra)
 
 NUM_TO_RETRIEVE = 100
 
-def search_lucene(terms_,fields_,requirements_,searcher,index=0):
+def search_lucene(fields_,terms_,requirements_,searcher,index=0):
   terms = []
   fields = []
-  requierments = []
+  requirements = []
   for (i,x) in enumerate(terms_):
     terms.append(x[index])
     fields.append(fields_[i][index])
     requirements.append(requirements_[i][index])
-  sys.stderr.write("Running query index %d: %s in %s restricted to %s\n" % (",".join(terms),",".join(fields),",".join(requirements)))
+  sys.stderr.write("Running query index %d: %s in %s restricted to %s\n" % (index,",".join(terms),",".join(fields),",".join([str(x) for x in requirements])))
   query = MultiFieldQueryParser.parse(Version.LUCENE_4_10_1,terms,fields,requirements,analyzer2)
   return(searcher.search(query, NUM_TO_RETRIEVE))
 
@@ -57,6 +57,7 @@ def search_lucene(terms_,fields_,requirements_,searcher,index=0):
 #3) EXPERIMENT_TITLE::lung cancer;;SAMPLE_SAMPLE_ABSTRACT::adenocarncinoma => fields=[EXPERIMENT_TITLE],SAMPLE_SAMPLE_ABSTRACT],values=[lung cancer,adenocarncinoma]
 #3b) all::tag1:value1;;all::tag2:value2 => fields=[all,all],values=[tag1:value1,tag2:value2]
 #returns fields and values to search on for both pubmed (index 0) and sra (index 1)
+field_patt = re.compile(r'::')
 FIELD_DELIM=';;'
 FIELD_VAL_DELIM='::'
 def parse_query(query):
@@ -64,7 +65,7 @@ def parse_query(query):
   fields = []
   values = []
   requirements = []
-  if len(terms) == 1:
+  if len(terms) == 1 and field_patt.search(terms[0]) is None:
     fields = ['raw','raw']
     values = [terms[0],terms[0]]
     requirements = [BooleanClause.Occur.MUST,BooleanClause.Occur.MUST]
@@ -93,7 +94,7 @@ def process_query(query):
   (fields,values,requirements) = parse_query(query)
   presults = search_lucene(fields,values,requirements,psearcher,index=0) 
   sresults = search_lucene(fields,values,requirements,ssearcher,index=1) 
-  sys.stderr.write("results: %d in pubmed; %d in sra\n" % (presults.totalHists,sresults.totalHits))
+  sys.stderr.write("results: %d in pubmed; %d in sra\n" % (presults.totalHits,sresults.totalHits))
 
 def main():
   if len(sys.argv) < 2:
