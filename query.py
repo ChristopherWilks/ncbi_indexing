@@ -51,7 +51,7 @@ def search_lucene(fields_,terms_,requirements_,searcher,index=0):
     requirements.append(requirements_[i][index])
   sys.stderr.write("Running query %s: (\"%s\") in fields (%s) with requirements (%s)\n" % (sym2name[index],"\",\"".join(terms),",".join(fields),",".join([sym2name[str(x)] for x in requirements])))
   query = MultiFieldQueryParser.parse(Version.LUCENE_4_10_1,terms,fields,requirements,analyzer2)
-  return(searcher.search(query, NUM_TO_RETRIEVE))
+  return(terms,fields,requirements,searcher.search(query, NUM_TO_RETRIEVE))
 
 #sample queries:
 #1) human lung cancer => field=raw,value = human lung cancer
@@ -94,9 +94,21 @@ def parse_query(query):
 
 def process_query(query):
   (fields,values,requirements) = parse_query(query)
-  presults = search_lucene(fields,values,requirements,psearcher,index=0) 
-  sresults = search_lucene(fields,values,requirements,ssearcher,index=1) 
-  sys.stderr.write("results: %d in pubmed; %d in sra\n" % (presults.totalHits,sresults.totalHits))
+  (pterms,pfields,preqs,presults) = search_lucene(fields,values,requirements,psearcher,index=0) 
+  (sterms,sfields,sreqs,sresults) = search_lucene(fields,values,requirements,ssearcher,index=1) 
+  sys.stdout.write("results: %d in pubmed; %d in sra\n" % (presults.totalHits,sresults.totalHits))
+  
+  parse_results('PMID',pterms,pfields,preqs,presults,psearcher)
+  parse_results('EXPERIMENT_accession',sterms,sfields,sreqs,sresults,ssearcher)
+
+def parse_results(primary_id_field,terms,fields,reqs,results,searcher):
+  for r in results.scoreDocs:
+    docu = searcher.doc(r.doc)
+    pid = docu.get(primary_id_field)
+    sys.stdout.write("%s: %s\n" % (primary_id_field,pid))
+    for f in fields:
+      f_ = docu.get(f)
+      sys.stderr.write("%s\t%s\n" % (f,f_))
 
 def main():
   if len(sys.argv) < 2:
