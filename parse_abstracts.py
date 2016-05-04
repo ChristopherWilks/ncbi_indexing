@@ -1,4 +1,4 @@
-#!/bin/env python2.7
+#!/usr/bin/env python2.7
 import sys
 import re
 import gzip
@@ -7,11 +7,14 @@ import lucene
 from org.apache.lucene.document import Document, Field, IntField, StringField, TextField
 
 from lucene_indexer import LuceneIndexer
+from IdentityExtractor import IdentifierExtracter
 
 start_patt = re.compile(r'^(\d+)\.\s+(.+)$')
 spacer_line_patt = re.compile(r'^\s*$')
 author_info_patt = re.compile(r'^Author information:\s*$')
 end_patt = re.compile(r'^PMID:\s+(\d+).*$')
+
+hugo_genenamesF = 'refFlat.hg38.txt.sorted'
 
 #expect: journal,title,authors,author_info,abstract,and pmid at least
 #if we get additional fields, well stick them on the end of the abstract proper so as to avoid any specialized field handling
@@ -19,29 +22,26 @@ end_patt = re.compile(r'^PMID:\s+(\d+).*$')
 HEADER = [['JOURNAL',TextField],['TITLE',TextField],['AUTHORS',TextField],['AUTHOR_INFO',TextField],['ABSTRACT',TextField],['PMID',StringField],['raw',TextField]]
 BASE_NUM_FIELDS=len(HEADER)
 ABSTRACT_INDEX=4
+LUCENE_MODE=1
 
-def insert_into_lucene(li,pmid,fields,counter):
-  print("Inserting %s %d into lucene:" % (pmid,counter))
+def process_abstract(processor,pmid,fields,counter,mode):
+  if mode == LUCENE_MODE:
+    print("Inserting %s %d into lucene:" % (pmid,counter))
+    processor.add_document(fields,HEADER,pmid)
+  else:
+    (genes,accessions) = processor.extract_identifiers(pmid,counter,fields[-1])
+    sys.stdout.write("IDs\t%s\t%s\t%s\n" % (pmid,",".join(sorted(genes)),",".join(sorted(accessions))))
   #for field in fields:
   #  print(field)
-  li.add_document(fields,HEADER,pmid)
 
-def main():
-  inputF = sys.argv[1]
-  li = LuceneIndexer("./lucene_pubmed_index")
+def parse_abstracts(processor,mode,f):
   rindex = ""
   fields = []
   findex = 0
   prev_empty_line = False
-
-  f=None
-  if inputF[-3:] == '.gz':
-    f = gzip.open(inputF,"r")
-  else:
-    f = open(inputF,"r")
-
   counter=0
   raw = []
+
   for line in f:
     if spacer_line_patt.search(line):
       prev_empty_line = True
@@ -67,7 +67,7 @@ def main():
       fields.append(" ".join(raw))
       #do lucene insertion here
       counter+=1
-      insert_into_lucene(li,pmid,fields,counter)
+      process_abstract(processor,pmid,fields,counter,mode)
       findex = 0
       fields = []
       raw=[]
@@ -78,21 +78,36 @@ def main():
         fields.append(line)
       else:
         #concatenate multi-line fields
-        #fields[findex]="%s\n%s" % (fields[findex],line) 
         fields[findex]="%s %s" % (fields[findex],line) 
-
     prev_empty_line = False
 
-    #prev_empty_line = False
-    #if spacer_line_patt.search(line):
-    #if current_empty:
-      #prev_empty_line = True
 
-  #sys.stderr.write("more than 6 line count %s\n" % (more_than_6_field_count))
-  #sys.stderr.write("more than 7 line count %s\n" % (more_than_7_field_count))
-  #sys.stderr.write("copy count %s\n" % (copy_count))
-  li.close()
+def main():
+  if len(sys.argv) < 2:
+    sys.stderr.write("need abstracts file to parse\n")
+    sys.exit(-1) 
+  inputF = sys.argv[1]
+  mode = LUCENE_MODE
+  processor = None
+  if len(sys.argv) > 2:
+    mode = sys.argv[2]
+  if mode > LUCENE_MODE:
+    processor = IdentifierExtracter(hugo_genenamesF,gene_filter=re.compile(r'[\-\d]'),filter_stopwords=True)
+  else:
+    processor = LuceneIndexer("./lucene_pubmed_index2")
+
+  f=None
+  if inputF[-3:] == '.gz':
+    f = gzip.open(inputF,"r")
+  else:
+    f = open(inputF,"r")
+  
+  parse_abstracts(processor,mode,f)
+  
+  if mode == LUCENE_MODE:
+    li.close()
   f.close()
+
 
 if __name__ == '__main__':
   main()
