@@ -16,22 +16,19 @@ end_patt = re.compile(r'^PMID:\s+(\d+).*$')
 #expect: journal,title,authors,author_info,abstract,and pmid at least
 #if we get additional fields, well stick them on the end of the abstract proper so as to avoid any specialized field handling
 #HEADER = ['journal_t','title_s','authors_t','author_info_t','abstract_t','pmid_s','copyright_t','extra_t']
-HEADER = [['journal_t',TextField],['title_s',StringField],['authors_t',TextField],['author_info_t',TextField],['abstract_t',TextField],['pmid_s',StringField]]
+HEADER = [['JOURNAL',TextField],['TITLE',TextField],['AUTHORS',TextField],['AUTHOR_INFO',TextField],['ABSTRACT',TextField],['PMID',StringField],['raw',TextField]]
 BASE_NUM_FIELDS=len(HEADER)
 ABSTRACT_INDEX=4
 
 def insert_into_lucene(li,pmid,fields,counter):
   print("Inserting %s %d into lucene:" % (pmid,counter))
+  #for field in fields:
+  #  print(field)
   li.add_document(fields,HEADER,pmid)
-  #for (i,field) in enumerate(fields):
-  #  prefix = ""
-  #  if i == len(fields)-1:
-  #    prefix = "MYPMID:"
-  #  print("%s%s" % (prefix,field))
 
 def main():
   inputF = sys.argv[1]
-  li = LuceneIndexer("./lucene_index2")
+  li = LuceneIndexer("./lucene_pubmed_index")
   rindex = ""
   fields = []
   findex = 0
@@ -44,8 +41,14 @@ def main():
     f = open(inputF,"r")
 
   counter=0
+  raw = []
   for line in f:
+    if spacer_line_patt.search(line):
+      prev_empty_line = True
+      continue
     line = line.rstrip()
+    #track all lines in almost raw form (replaces line breaks with a space)
+    raw.append(line)
     m = start_patt.search(line)
     author_ = author_info_patt.search(line)
     e = end_patt.search(line)
@@ -61,11 +64,13 @@ def main():
     elif e and findex > 0:
       pmid = e.group(1)
       fields.append(pmid)
+      fields.append(" ".join(raw))
       #do lucene insertion here
       counter+=1
       insert_into_lucene(li,pmid,fields,counter)
       findex = 0
       fields = []
+      raw=[]
     elif not spacer_line_patt.search(line) and len(fields) > 0: 
       if prev_empty_line and findex < ABSTRACT_INDEX:
         #dont include the "Author information" line
@@ -77,8 +82,11 @@ def main():
         fields[findex]="%s %s" % (fields[findex],line) 
 
     prev_empty_line = False
-    if spacer_line_patt.search(line):
-      prev_empty_line = True
+
+    #prev_empty_line = False
+    #if spacer_line_patt.search(line):
+    #if current_empty:
+      #prev_empty_line = True
 
   #sys.stderr.write("more than 6 line count %s\n" % (more_than_6_field_count))
   #sys.stderr.write("more than 7 line count %s\n" % (more_than_7_field_count))
