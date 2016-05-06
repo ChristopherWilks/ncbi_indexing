@@ -1,10 +1,17 @@
 #!/bin/env python2.7
 import sys
 import re 
-import lxml.etree as xparser
 import gzip
 import glob
+
+import lxml.etree as xparser
 from xml import sax
+
+import lucene
+from org.apache.lucene.document import Document, Field, IntField, StringField, TextField
+from lucene_indexer import LuceneIndexer
+
+from IdentityExtractor import IdentifierExtracter
 
 #expanded from http://stackoverflow.com/questions/17530471/python-get-all-text-from-an-xml-document
 #only used for the raw exraction of all text, space delimited for word searching
@@ -16,17 +23,13 @@ class FullXML2TextHandler(sax.handler.ContentHandler):
 
     def characters(self, data):
         self.text.append(data)
-    
+   
+    #this was a necessary addition to pick up text in attributes 
     def startElement(self, name, attrs):
         for name in attrs.getNames():
           self.text.append(attrs.getValue(name))
 
-import lucene
-from org.apache.lucene.document import Document, Field, IntField, StringField, TextField
-
-from lucene_indexer import LuceneIndexer
-
-from IdentityExtractor import IdentifierExtracter
+hugo_genenamesF = 'refFlat.hg38.txt.sorted'
 
 fields_seen = set(['all','raw'])
 
@@ -54,10 +57,7 @@ def process_sub_children(sub_e,fields,header,top_e):
     if attributes:
       if len(child) > 1 and child[0] != None and child[1] != None:
         #TAG
-        #header.append([child[0].text,TextField])
         #VALUE
-        #print("%s %s\n" % (child.tag,child[1].tag))
-        #fields.append(child[1].text) 
         #actaully only add these to the first field which is all the attributes concatenated by spaces
         fields[0].append("%s:%s" % (child[0].text,child[1].text))
     elif child.text != None:
@@ -68,6 +68,8 @@ def process_sub_children(sub_e,fields,header,top_e):
       fields.append(child.text)
       fields[0].append(child.text)
 
+#here we just add all the attributes *of an element* to the "all" field (index 0)
+#NOTE: not to be confused with "*_ATTRIBUTES" elements, handled elsewhere
 def add_element_attributes(element,attribute_names,fields,accessions):
   for attribute_name in attribute_names:
     value = element.get(attribute_name)
@@ -91,24 +93,32 @@ def parse_raw_text_for_genes(exp_xml,ie):
   (genes,accessions) = ie.extract_identifiers("NA",0,raw_text)
   return genes
 
-#parse one EXPERIMENT_PACKAGE section (one document in lucene)
+#this is the main parsing method
+#parses one EXPERIMENT_PACKAGE section (one document in lucene)
 def parse_exp(exp_xml,li,ie):
   fields = [[]]
   header = [['all',TextField]]
   accessions = set()
+  pmids = set()
   accession = 'NA'
+
+  #extract gene names
   found_genes = parse_raw_text_for_genes(exp_xml,ie)
+
   for (top_e,subs) in elements.iteritems():
     e = exp_xml.find(top_e)
     #make sure to grab all pubmed id links
-    if top_e == 'STUDY':
+    if top_e == 'STUDY' and e != None:
       xlinks = e.findall(".//XREF_LINK")
       for xlink in xlinks:
-        if len(xlink) > 1 and xlink[0].text == 'pubmed':
+        if len(xlink) > 1 and xlink[0].text == 'pubmed' and xlink[1].text != None:
           fields[0].append("%s:%s" % (xlink[0].text,xlink[1].text))
+          pmids.add(xlink[1].text)
     if e == None:
       continue
+    #only grab the child elements and their children (where applicable) that we care about
     for (k,v) in subs.iteritems():
+      #get the xml attributes of the current element (top_e)
       if k == 'attrs':
         for attr_ in v:
           attr = e.get(attr_)
@@ -123,14 +133,18 @@ def parse_exp(exp_xml,li,ie):
             if fieldname not in fields_seen: 
               fields_seen.add(fieldname)
             fields[0].append(attr)
+      #sub elements and their children
       else:
           sube = e.find(".//%s" % k)
           if sube == None:
             continue
+          #get the first sub-level children  of this sub element
           if v == 2:
             process_sub_children(sube,fields,header,top_e)
+          #otherwise parse this sub element's text
           elif sube.text != None:
             fields.append(sube.text)
+            #need to prefix with the top element name since there will be multiples of some subchildren (e.g. "TITLE")
             fieldname = "%s_%s" % (top_e,sube.tag)
             header.append([fieldname,TextField])
             if fieldname not in fields_seen: 
@@ -144,8 +158,11 @@ def parse_exp(exp_xml,li,ie):
   header.append(['raw',TextField])
   if len(fields) > 0:
     fields[0] = ' '.join(fields[0])
-  #print_doc(fields,header,accession)
-  print("adding_document\t%s\t%s\t%s" % (accession,";".join(sorted(accessions)),";".join(sorted(found_genes))))
+  pmids_ = ""
+  #if len(pmids) > 0:
+    #pmids_ = ";".join(sorted(pmids))
+  #print("adding_document\t%s\t%s\t%s\t%s" % (accession,";".join(sorted(accessions)),";".join(sorted(found_genes)),pmids_))
+  print("adding_document\t%s\t%s\t%s\t%s" % (accession,";".join(sorted(accessions)),";".join(sorted(found_genes)),";".join(sorted(pmids))))
   li.add_document(fields,header,accession)
           
 def parse_sra_chunk(xml,li,ie):
@@ -154,9 +171,7 @@ def parse_sra_chunk(xml,li,ie):
   for exp in exps:
     parse_exp(exp,li,ie) 
 
-hugo_genenamesF = 'refFlat.hg38.txt.sorted'
 def main():
-  
   li = LuceneIndexer("./lucene_sra_index2")
   ie = IdentifierExtracter(hugo_genenamesF,gene_filter=re.compile(r'[\-\d]'),filter_stopwords=True)
   files_ = glob.glob('*.gz')
