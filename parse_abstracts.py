@@ -110,7 +110,7 @@ def main():
   parse_abstracts(processors,mode,f)
   
   if mode != EXTRACT_IDS_MODE:
-    li.close()
+    processors['indexer'].close()
   f.close()
 
 
