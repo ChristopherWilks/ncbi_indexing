@@ -1,6 +1,9 @@
 #!/usr/bin/env python2.7
 import sys
+import os
 import re
+
+import pickle
 
 #based on the example code at
 #http://graus.nu/blog/pylucene-4-0-in-60-seconds-tutorial/
@@ -22,7 +25,9 @@ from org.apache.lucene.store import SimpleFSDirectory
 from org.apache.lucene.util import Version
 
 import parse_abstracts
-#HEADER = [['journal_t',TextField],['title_s',StringField],['authors_t',TextField],['author_info_t',TextField],['abstract_t',TextField],['pmid_s',StringField]]
+from IdentityExtractor import IdentifierExtracter
+
+
 pubmed_field_set = set()
 [pubmed_field_set.add(x[0]) for x in parse_abstracts.HEADER]
 
@@ -40,6 +45,7 @@ psearcher = IndexSearcher(pubmed)
 ssearcher = IndexSearcher(sra)
 
 NUM_TO_RETRIEVE = 100
+hugo_genenamesF = 'refFlat.hg38.txt.sorted'
 
 def search_lucene(fields_,terms_,requirements_,searcher,index=0):
   terms = []
@@ -62,7 +68,7 @@ def search_lucene(fields_,terms_,requirements_,searcher,index=0):
 field_patt = re.compile(r'::')
 FIELD_DELIM=';;'
 FIELD_VAL_DELIM='::'
-def parse_query(query):
+def parse_query(ie,query):
   terms = query.split(FIELD_DELIM)
   fields = []
   values = []
@@ -90,32 +96,94 @@ def parse_query(query):
       else:
         fields.append(['raw','raw']) 
       values.append(vals)
-  return (fields,values,requirements) 
+  raw_text = ' '.join(set([z for k in values for z in k]))
+  (genes,accessions) = ie.extract_identifiers("NA",0,raw_text)
+  return (fields,values,requirements,genes,accessions) 
 
-def process_query(query):
-  (fields,values,requirements) = parse_query(query)
+def get_ids_by_genenames(genes2ids,genes):
+  pm_ids = set()
+  sra_ids = set()
+  for gene in genes:
+    try:
+      (pids,sids) = genes2ids[gene]
+      pm_ids.update(pids) 
+      sra_ids.update(sids) 
+    except KeyError, ke:
+      continue 
+  #map SRX ids back to their full id for matching
+  sra_ids = set(map(lambda z: "SRX%s" % z,sra_ids))
+  return (pm_ids,sra_ids)
+
+def process_query(ie,genes2ids,query):
+  #get the query parsed into its fields, their values, and the boolean requirements (MUST or SHOULD)
+  #also extract out any gene names and/or SRA accessions
+  (fields,values,requirements,genes,accessions) = parse_query(ie,query)
+
   (pterms,pfields,preqs,presults) = search_lucene(fields,values,requirements,psearcher,index=0) 
   (sterms,sfields,sreqs,sresults) = search_lucene(fields,values,requirements,ssearcher,index=1) 
   sys.stdout.write("results: %d in pubmed; %d in sra\n" % (presults.totalHits,sresults.totalHits))
-  
-  parse_results('PMID',pterms,pfields,preqs,presults,psearcher)
-  parse_results('EXPERIMENT_accession',sterms,sfields,sreqs,sresults,ssearcher)
 
-def parse_results(primary_id_field,terms,fields,reqs,results,searcher):
+  #find the ids of both (either/or) pubmed and SRA entries which contains references to one or more
+  #of the genenames in the query 
+  (pubmed_ids,sra_ids) = get_ids_by_genenames(genes2ids,genes)
+  sra_ids.update(accessions)
+ 
+  parse_results('PMID',pterms,pfields,preqs,presults,psearcher,id_filter=pubmed_ids)
+  parse_results('EXPERIMENT_accession',sterms,sfields,sreqs,sresults,ssearcher,id_filter=sra_ids)
+
+def parse_results(primary_id_field,terms,fields,reqs,results,searcher,id_filter=set()):
+  sys.stdout.write("filter set %d\n" % (len(id_filter)))
   for r in results.scoreDocs:
     docu = searcher.doc(r.doc)
     pid = docu.get(primary_id_field)
+    #do something to incorporate id_filter
     sys.stdout.write("%s: %s\n" % (primary_id_field,pid))
     for f in fields:
       f_ = docu.get(f)
-      sys.stderr.write("%s\t%s\n" % (f,f_))
+      #sys.stderr.write("%s\t%s\n" % (f,f_))
+
+#pubmed,sra
+PUBMED_IDX=0
+SRA_IDX=1
+
+ID_COL=[1,1]
+GENE_COL=[2,3]
+def load_gene2id_map(files):
+  genes2ids = {}
+  #for faster loading (serilized binary) look for pickled file
+  pkl_file = "genes2ids_map.pkl"
+  if os.path.exists(pkl_file):
+    with open(pkl_file,"rb") as fin_:
+      genes2ids = pickle.load(fin_)
+      return genes2ids
+  for (idx,file_) in enumerate(files):
+    with open(file_,"r") as fin:
+      for line in fin:
+        fields = line.rstrip('\n').split("\t")
+        #print("%d %s" % (idx,line))
+        id_ = fields[ID_COL[idx]]
+        if idx == SRA_IDX and len(id_) > 3:
+          #avoid the redundancy of storing the full "SRX" prefix
+          id_ = id_[3:]
+        genes = fields[GENE_COL[idx]].split(";")
+        for gene in genes:
+          if gene not in genes2ids:
+            #pubmed,sra
+            genes2ids[gene] = [set(),set()]
+          genes2ids[gene][idx].add(int(id_))
+  with open(pkl_file,"wb") as fout_:
+    pickle.dump(genes2ids, fout_)
+  return genes2ids
+
 
 def main():
   if len(sys.argv) < 2:
     sys.stderr.write("need query\n")
     sys.exit(-1)
+  ie = IdentifierExtracter(hugo_genenamesF,gene_filter=re.compile(r'[\-\d]'),filter_stopwords=True)
+  genes2ids = load_gene2id_map(["pubmed_map.tsv","sra_map.tsv"])
   query = sys.argv[1]
-  process_query(query)
+  process_query(ie,genes2ids,query)
 
 if __name__ == '__main__':
   main() 
