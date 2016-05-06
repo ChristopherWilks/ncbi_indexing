@@ -131,13 +131,23 @@ def process_query(ie,genes2ids,query):
   parse_results('PMID',pterms,pfields,preqs,presults,psearcher,id_filter=pubmed_ids)
   parse_results('EXPERIMENT_accession',sterms,sfields,sreqs,sresults,ssearcher,id_filter=sra_ids)
 
+def relevance_sort(scoreDocs,primary_id_field,searcher,id_filter):
+  #do something to incorporate id_filter
+  for d in scoreDocs:
+    pid = searcher.doc(d.doc).get(primary_id_field)
+    if pid in id_filter:
+      d.score+=ID_BOOST
+  return sorted(scoreDocs,key=lambda x: x.score,reverse=True)
+
 def parse_results(primary_id_field,terms,fields,reqs,results,searcher,id_filter=set()):
   sys.stdout.write("filter set %d\n" % (len(id_filter)))
-  for r in results.scoreDocs:
+  for r in relevance_sort(results.scoreDocs,primary_id_field,searcher,id_filter):
     docu = searcher.doc(r.doc)
     pid = docu.get(primary_id_field)
-    #do something to incorporate id_filter
-    sys.stdout.write("%s: %s\n" % (primary_id_field,pid))
+    have_gene = False
+    if pid in id_filter:
+      have_gene = True
+    sys.stdout.write("%s: %s %d %s\n" % (primary_id_field,pid,r.score,have_gene))
     for f in fields:
       f_ = docu.get(f)
       #sys.stderr.write("%s\t%s\n" % (f,f_))
@@ -150,7 +160,7 @@ ID_COL=[1,1]
 GENE_COL=[2,3]
 def load_gene2id_map(files):
   genes2ids = {}
-  #for faster loading (serilized binary) look for pickled file
+  #for faster loading (serialized binary) look for pickled file
   pkl_file = "genes2ids_map.pkl"
   if os.path.exists(pkl_file):
     with open(pkl_file,"rb") as fin_:
