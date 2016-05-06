@@ -18,23 +18,27 @@ hugo_genenamesF = 'refFlat.hg38.txt.sorted'
 
 #expect: journal,title,authors,author_info,abstract,and pmid at least
 #if we get additional fields, well stick them on the end of the abstract proper so as to avoid any specialized field handling
-#HEADER = ['journal_t','title_s','authors_t','author_info_t','abstract_t','pmid_s','copyright_t','extra_t']
-HEADER = [['JOURNAL',TextField],['TITLE',TextField],['AUTHORS',TextField],['AUTHOR_INFO',TextField],['ABSTRACT',TextField],['PMID',StringField],['raw',TextField]]
-BASE_NUM_FIELDS=len(HEADER)
+HEADER = [['JOURNAL',TextField],['TITLE',TextField],['AUTHORS',TextField],['AUTHOR_INFO',TextField],['ABSTRACT',TextField],['PMID',StringField],['raw',TextField],['genes',TextField],['accessions',TextField]]
 ABSTRACT_INDEX=4
-LUCENE_MODE=1
 
-def process_abstract(processor,pmid,fields,counter,mode):
-  if mode == LUCENE_MODE:
-    print("Inserting %s %d into lucene:" % (pmid,counter))
-    processor.add_document(fields,HEADER,pmid)
-  else:
-    (genes,accessions) = processor.extract_identifiers(pmid,counter,fields[-1])
-    sys.stdout.write("IDs\t%s\t%s\t%s\n" % (pmid,",".join(sorted(genes)),",".join(sorted(accessions))))
+BOTH_MODE=1 #default
+LUCENE_MODE=2
+EXTRACT_IDS_MODE=3
+
+def process_abstract(processors,pmid,fields,counter,mode):
+  (genes,accessions)=([],[])
+  if mode != LUCENE_MODE:
+    (genes,accessions) = processors['extractor'].extract_identifiers(pmid,counter,fields[-1])
+    sys.stdout.write("IDs\t%s\t%s\t%s\n" % (pmid,";".join(sorted(genes)),";".join(sorted(accessions))))
+  if mode != EXTRACT_IDS_MODE:
+    print("Inserting %s %d into lucene %d %d:" % (pmid,counter,len(genes),len(accessions)))
+    fields.append(";".join(sorted(genes)))
+    fields.append(";".join(sorted(accessions)))
+    processors['indexer'].add_document(fields,HEADER,pmid)
   #for field in fields:
   #  print(field)
 
-def parse_abstracts(processor,mode,f):
+def parse_abstracts(processors,mode,f):
   rindex = ""
   fields = []
   findex = 0
@@ -67,7 +71,7 @@ def parse_abstracts(processor,mode,f):
       fields.append(" ".join(raw))
       #do lucene insertion here
       counter+=1
-      process_abstract(processor,pmid,fields,counter,mode)
+      process_abstract(processors,pmid,fields,counter,mode)
       findex = 0
       fields = []
       raw=[]
@@ -87,14 +91,15 @@ def main():
     sys.stderr.write("need abstracts file to parse\n")
     sys.exit(-1) 
   inputF = sys.argv[1]
-  mode = LUCENE_MODE
-  processor = None
+  mode = BOTH_MODE
+  processors = {}
+
   if len(sys.argv) > 2:
     mode = sys.argv[2]
-  if mode > LUCENE_MODE:
-    processor = IdentifierExtracter(hugo_genenamesF,gene_filter=re.compile(r'[\-\d]'),filter_stopwords=True)
-  else:
-    processor = LuceneIndexer("./lucene_pubmed_index2")
+  if mode != EXTRACT_IDS_MODE:
+    processors['indexer']=LuceneIndexer("./lucene_pubmed_index2")
+  if mode != LUCENE_MODE:
+    processors['extractor']=IdentifierExtracter(hugo_genenamesF,gene_filter=re.compile(r'[\-\d]'),filter_stopwords=True)
 
   f=None
   if inputF[-3:] == '.gz':
@@ -102,9 +107,9 @@ def main():
   else:
     f = open(inputF,"r")
   
-  parse_abstracts(processor,mode,f)
+  parse_abstracts(processors,mode,f)
   
-  if mode == LUCENE_MODE:
+  if mode != EXTRACT_IDS_MODE:
     li.close()
   f.close()
 

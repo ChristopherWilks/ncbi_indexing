@@ -2,6 +2,8 @@
 import sys
 import re
 
+#avoid spurious matches in SRA metadata to short random matching terms
+MIN_GENE_NAME_LENGTH = 4
 stopwordsF = './common_words'
 
 class IdentifierExtracter():
@@ -34,7 +36,7 @@ class IdentifierExtracter():
       word = word.upper()
       #genename filtering is complicated by the fact
       #that genenames overlap regular English words
-      if word in self.genenames and \
+      if word in self.genenames and len(word) >= MIN_GENE_NAME_LENGTH and \
         word not in self.stopwords and \
         (self.gene_filter == None or \
           (self.gene_filter.search(word) != None and not self.gene_filter_out) or \
