@@ -128,30 +128,36 @@ def process_query(ie,genes2ids,query):
   (pubmed_ids,sra_ids) = get_ids_by_genenames(genes2ids,genes)
   sra_ids.update(accessions)
  
-  parse_results('PMID',pterms,pfields,preqs,presults,psearcher,id_filter=pubmed_ids)
-  parse_results('EXPERIMENT_accession',sterms,sfields,sreqs,sresults,ssearcher,id_filter=sra_ids)
+  parse_results(['PMID','EXPERIMENT_accession'],[presults,sresults],[psearcher,ssearcher],id_filters=[pubmed_ids,sra_ids])
 
+
+#def relevance_sort(scoreDocs,primary_id_field,searcher,id_filter):
 
 ID_BOOST=1000
-def relevance_sort(scoreDocs,primary_id_field,searcher,id_filter):
-  #do something to incorporate id_filter
-  for d in scoreDocs:
-    pid = searcher.doc(d.doc).get(primary_id_field)
+def score_results_for_id(result,searcher,primary_id_field,id_filter,final_results,idx):
+  for scoreDoc in result.scoreDocs:
+    pid = searcher.doc(scoreDoc.doc).get(primary_id_field)
     if pid in id_filter:
-      d.score+=ID_BOOST
-  return sorted(scoreDocs,key=lambda x: x.score,reverse=True)
+      scoreDoc.score+=ID_BOOST
+    #add both the scoreDoc AND the id (pubmed or sra)
+    final_results.append([idx,scoreDoc])
 
-def parse_results(primary_id_field,terms,fields,reqs,results,searcher,id_filter=set()):
-  sys.stdout.write("filter set %d\n" % (len(id_filter)))
-  for r in relevance_sort(results.scoreDocs,primary_id_field,searcher,id_filter):
-    docu = searcher.doc(r.doc)
-    pid = docu.get(primary_id_field)
+def parse_results(primary_id_fields,results,searchers,id_filters=[set(),set()]):
+  sys.stdout.write("filter set: %d %d\n" % (len(id_filters[0]),len(id_filters[1])))
+  merged_results = []
+  for (idx, result) in enumerate(results):
+    score_results_for_id(result,searchers[idx],primary_id_fields[idx],id_filters[idx],merged_results,idx)
+  for sdoc in sorted(merged_results,key=lambda x: x[1].score,reverse=True):
+    idx = sdoc[0]
+    scoreDoc = sdoc[1]
+    pfield = primary_id_fields[idx]
+    pid = searchers[idx].doc(scoreDoc.doc).get(pfield)
     have_gene = False
-    if pid in id_filter:
+    if scoreDoc.score >= 1000:
       have_gene = True
-    sys.stdout.write("%s: %s %d %s\n" % (primary_id_field,pid,r.score,have_gene))
-    for f in fields:
-      f_ = docu.get(f)
+    sys.stdout.write("%s: %s %d %s\n" % (pfield,pid,scoreDoc.score,have_gene))
+    #for f in fields:
+    #  f_ = docu.get(f)
       #sys.stderr.write("%s\t%s\n" % (f,f_))
 
 #pubmed,sra
