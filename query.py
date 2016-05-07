@@ -131,6 +131,7 @@ def process_query(ie,genes2ids,query):
   parse_results('PMID',pterms,pfields,preqs,presults,psearcher,id_filter=pubmed_ids)
   parse_results('EXPERIMENT_accession',sterms,sfields,sreqs,sresults,ssearcher,id_filter=sra_ids)
 
+ID_BOOST=1000
 def relevance_sort(scoreDocs,primary_id_field,searcher,id_filter):
   #do something to incorporate id_filter
   for d in scoreDocs:
