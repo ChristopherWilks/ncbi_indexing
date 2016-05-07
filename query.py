@@ -131,6 +131,7 @@ def process_query(ie,genes2ids,query):
   parse_results('PMID',pterms,pfields,preqs,presults,psearcher,id_filter=pubmed_ids)
   parse_results('EXPERIMENT_accession',sterms,sfields,sreqs,sresults,ssearcher,id_filter=sra_ids)
 
+
 ID_BOOST=1000
 def relevance_sort(scoreDocs,primary_id_field,searcher,id_filter):
   #do something to incorporate id_filter
@@ -162,11 +163,12 @@ GENE_COL=[2,3]
 def load_gene2id_map(files):
   genes2ids = {}
   #for faster loading (serialized binary) look for pickled file
-  pkl_file = "genes2ids_map.pkl"
-  if os.path.exists(pkl_file):
-    with open(pkl_file,"rb") as fin_:
-      genes2ids = pickle.load(fin_)
-      return genes2ids
+  #UPDAE: not faster, pickling/loading from takes ~4-5 seconds longer
+  #pkl_file = "genes2ids_map.pkl"
+  #if os.path.exists(pkl_file):
+  #  with open(pkl_file,"rb") as fin_:
+  #    genes2ids = pickle.load(fin_)
+  #    return genes2ids
   for (idx,file_) in enumerate(files):
     with open(file_,"r") as fin:
       for line in fin:
@@ -182,8 +184,8 @@ def load_gene2id_map(files):
             #pubmed,sra
             genes2ids[gene] = [set(),set()]
           genes2ids[gene][idx].add(int(id_))
-  with open(pkl_file,"wb") as fout_:
-    pickle.dump(genes2ids, fout_)
+  #with open(pkl_file,"wb") as fout_:
+  #  pickle.dump(genes2ids, fout_)
   return genes2ids
 
 
