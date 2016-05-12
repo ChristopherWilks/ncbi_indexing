@@ -28,7 +28,7 @@ EXTRACT_IDS_MODE=3
 def process_abstract(processors,pmid,fields,counter,mode):
   (genes,accessions)=([],[])
   if mode != LUCENE_MODE:
-    (genes,accessions) = processors['extractor'].extract_identifiers(pmid,counter,fields[-1])
+    (genes,accessions,pmids) = processors['extractor'].extract_identifiers(pmid,counter,fields[-1])
     sys.stdout.write("IDs\t%s\t%s\t%s\n" % (pmid,";".join(sorted(genes)),";".join(sorted(accessions))))
   if mode != EXTRACT_IDS_MODE:
     print("Inserting %s %d into lucene %d %d:" % (pmid,counter,len(genes),len(accessions)))

@@ -59,7 +59,7 @@ def process_sub_children(sub_e,fields,header,top_e):
         #TAG
         #VALUE
         #actaully only add these to the first field which is all the attributes concatenated by spaces
-        fields[0].append("%s:%s" % (child[0].text,child[1].text))
+        fields[0].append("%s$%s" % (child[0].text,child[1].text))
     elif child.text != None:
       fieldname = "%s_%s" % (top_e,child.tag)
       header.append([fieldname,TextField])
@@ -88,10 +88,10 @@ def parse_run_set(exp_xml,header,fields,accessions):
     if rattrs != None:
       process_sub_children(rattrs,fields,header,run.text)
 
-def parse_raw_text_for_genes(exp_xml,ie):
+def parse_raw_text_for_ids(exp_xml,ie):
   raw_text = FullXML2TextHandler().parseString(xparser.tostring(exp_xml,pretty_print=True))
-  (genes,accessions) = ie.extract_identifiers("NA",0,raw_text)
-  return genes
+  (genes,accessions,pmids) = ie.extract_identifiers("NA",0,raw_text)
+  return (genes,accessions,pmids)
 
 #this is the main parsing method
 #parses one EXPERIMENT_PACKAGE section (one document in lucene)
@@ -102,8 +102,10 @@ def parse_exp(exp_xml,li,ie):
   pmids = set()
   accession = 'NA'
 
-  #extract gene names
-  found_genes = parse_raw_text_for_genes(exp_xml,ie)
+  #extract gene names and any free text pmids
+  (found_genes,accessions,pmids_) = parse_raw_text_for_ids(exp_xml,ie)
+  map(lambda z: fields[0].append("%s:%s" % ('pubmed',z)),pmids_)
+  pmids.update(set(pmids_))
 
   for (top_e,subs) in elements.iteritems():
     e = exp_xml.find(top_e)
@@ -112,7 +114,7 @@ def parse_exp(exp_xml,li,ie):
       xlinks = e.findall(".//XREF_LINK")
       for xlink in xlinks:
         if len(xlink) > 1 and xlink[0].text == 'pubmed' and xlink[1].text != None:
-          fields[0].append("%s:%s" % (xlink[0].text,xlink[1].text))
+          fields[0].append("%s;%s" % (xlink[0].text,xlink[1].text))
           pmids.add(xlink[1].text)
     if e == None:
       continue
@@ -152,17 +154,20 @@ def parse_exp(exp_xml,li,ie):
             fields[0].append(sube.text)
 
   parse_run_set(exp_xml,header,fields,accessions)
-  fields.append(";".join(sorted(found_genes)))
+
+  genes_sorted = ";".join(sorted(found_genes))
+  fields.append(genes_sorted)
   header.append(['genes',TextField])
+  pmids_sorted = ";".join(sorted(pmids))
+  fields.append(pmids_sorted)
+  header.append(['pmids',TextField])
   fields.append(xparser.tostring(exp_xml))
   header.append(['raw',TextField])
+
   if len(fields) > 0:
     fields[0] = ' '.join(fields[0])
   pmids_ = ""
-  #if len(pmids) > 0:
-    #pmids_ = ";".join(sorted(pmids))
-  #print("adding_document\t%s\t%s\t%s\t%s" % (accession,";".join(sorted(accessions)),";".join(sorted(found_genes)),pmids_))
-  print("adding_document\t%s\t%s\t%s\t%s" % (accession,";".join(sorted(accessions)),";".join(sorted(found_genes)),";".join(sorted(pmids))))
+  print("adding_document\t%s\t%s\t%s\t%s" % (accession,";".join(sorted(accessions)),genes_sorted,pmids_sorted))
   li.add_document(fields,header,accession)
           
 def parse_sra_chunk(xml,li,ie):
@@ -172,7 +177,7 @@ def parse_sra_chunk(xml,li,ie):
     parse_exp(exp,li,ie) 
 
 def main():
-  li = LuceneIndexer("./lucene_sra_index2")
+  li = LuceneIndexer("./lucene_sra_index3")
   ie = IdentifierExtracter(hugo_genenamesF,gene_filter=re.compile(r'[\-\d]'),filter_stopwords=True)
   files_ = glob.glob('*.gz')
   for f in files_:

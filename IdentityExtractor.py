@@ -27,10 +27,12 @@ class IdentifierExtracter():
     #here we specify the SRA accession regex (matches: submission(A),run(R),sample(S),study(P), and experiment(X))
     #for more information see: http://www.ncbi.nlm.nih.gov/books/NBK56913/
     self.sra_patt = re.compile(r'(SR[ARSPX]\d{6,6})')
+    self.pmid_patt = re.compile(r'PMID:?\s*(\d+)',re.I)
 
   def extract_identifiers(self,id_,counter,raw_text):
     genes = set()
     accessions = set()
+    pmids = re.findall(self.pmid_patt,raw_text)
     words = re.split("\s+",raw_text)
     for word in words:
       word = word.upper()
@@ -45,4 +47,4 @@ class IdentifierExtracter():
       m = self.sra_patt.search(word) 
       if m:
        accessions.add(m.group(1))
-    return (genes,accessions) 
+    return (genes,accessions,pmids) 

@@ -97,8 +97,8 @@ def parse_query(ie,query):
         fields.append(['raw','raw']) 
       values.append(vals)
   raw_text = ' '.join(set([z for k in values for z in k]))
-  (genes,accessions) = ie.extract_identifiers("NA",0,raw_text)
-  return (fields,values,requirements,genes,accessions) 
+  (genes,accessions,pmids) = ie.extract_identifiers("NA",0,raw_text)
+  return (fields,values,requirements,genes,accessions,pmids) 
 
 def get_ids_by_genenames(genes2ids,genes):
   pm_ids = set()
@@ -116,8 +116,8 @@ def get_ids_by_genenames(genes2ids,genes):
 
 def process_query(ie,genes2ids,query):
   #get the query parsed into its fields, their values, and the boolean requirements (MUST or SHOULD)
-  #also extract out any gene names and/or SRA accessions
-  (fields,values,requirements,genes,accessions) = parse_query(ie,query)
+  #also extract out any gene names and/or SRA accessions and/or PMIDs, though we're only interested in genenames at this time
+  (fields,values,requirements,genes,accessions,pmids) = parse_query(ie,query)
 
   (pterms,pfields,preqs,presults) = search_lucene(fields,values,requirements,psearcher,index=0) 
   (sterms,sfields,sreqs,sresults) = search_lucene(fields,values,requirements,ssearcher,index=1) 
