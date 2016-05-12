@@ -114,7 +114,7 @@ def get_ids_by_genenames(genes2ids,genes):
   sra_ids = set(map(lambda z: "SRX%s" % z,sra_ids))
   return (pm_ids,sra_ids)
 
-def process_query(ie,genes2ids,query):
+def process_query(ie,genes2ids,id2additional_ids,query):
   #get the query parsed into its fields, their values, and the boolean requirements (MUST or SHOULD)
   #also extract out any gene names and/or SRA accessions and/or PMIDs, though we're only interested in genenames at this time
   (fields,values,requirements,genes,accessions,pmids) = parse_query(ie,query)
@@ -128,7 +128,7 @@ def process_query(ie,genes2ids,query):
   (pubmed_ids,sra_ids) = get_ids_by_genenames(genes2ids,genes)
   sra_ids.update(accessions)
  
-  parse_results(['PMID','EXPERIMENT_accession'],[presults,sresults],[psearcher,ssearcher],id_filters=[pubmed_ids,sra_ids])
+  parse_results(['PMID','EXPERIMENT_accession'],[presults,sresults],[psearcher,ssearcher],id2additional_ids,id_filters=[pubmed_ids,sra_ids])
 
 
 #def relevance_sort(scoreDocs,primary_id_field,searcher,id_filter):
@@ -142,7 +142,7 @@ def score_results_for_id(result,searcher,primary_id_field,id_filter,final_result
     #add both the scoreDoc AND the id (pubmed or sra)
     final_results.append([idx,scoreDoc])
 
-def parse_results(primary_id_fields,results,searchers,id_filters=[set(),set()]):
+def parse_results(primary_id_fields,results,searchers,id2additional_ids,id_filters=[set(),set()]):
   sys.stdout.write("filter set: %d %d\n" % (len(id_filters[0]),len(id_filters[1])))
   merged_results = []
   for (idx, result) in enumerate(results):
@@ -153,9 +153,12 @@ def parse_results(primary_id_fields,results,searchers,id_filters=[set(),set()]):
     pfield = primary_id_fields[idx]
     pid = searchers[idx].doc(scoreDoc.doc).get(pfield)
     have_gene = False
-    if scoreDoc.score >= 1000:
-      have_gene = True
-    sys.stdout.write("%s: %s %d %s\n" % (pfield,pid,scoreDoc.score,have_gene))
+    #if scoreDoc.score >= 1000:
+    #  have_gene = True
+    additional_ids = ""
+    if pid in id2additional_ids:
+      additional_ids = id2additional_ids[pid]
+    sys.stdout.write("%s: %s %d %s\n" % (pfield,pid,scoreDoc.score,additional_ids))
     #for f in fields:
     #  f_ = docu.get(f)
       #sys.stderr.write("%s\t%s\n" % (f,f_))
@@ -166,21 +169,20 @@ SRA_IDX=1
 
 ID_COL=[1,1]
 GENE_COL=[2,3]
-def load_gene2id_map(files):
+ADD_IDS_START_COL=[2,2]
+def load_gene2id_map(files,print_additional_ids=False):
   genes2ids = {}
+  id2additional_ids = {}
   #for faster loading (serialized binary) look for pickled file
-  #UPDAE: not faster, pickling/loading from takes ~4-5 seconds longer
-  #pkl_file = "genes2ids_map.pkl"
-  #if os.path.exists(pkl_file):
-  #  with open(pkl_file,"rb") as fin_:
-  #    genes2ids = pickle.load(fin_)
-  #    return genes2ids
+  #UPDATE: not faster, pickling/loading from takes ~4-5 seconds longer
   for (idx,file_) in enumerate(files):
     with open(file_,"r") as fin:
       for line in fin:
         fields = line.rstrip('\n').split("\t")
         #print("%d %s" % (idx,line))
         id_ = fields[ID_COL[idx]]
+        if print_additional_ids and len(fields[ADD_IDS_START_COL[idx]]) > 0:
+          id2additional_ids[str(id_)]="\t".join(fields[ADD_IDS_START_COL[idx]:])
         if idx == SRA_IDX and len(id_) > 3:
           #avoid the redundancy of storing the full "SRX" prefix
           id_ = id_[3:]
@@ -190,19 +192,19 @@ def load_gene2id_map(files):
             #pubmed,sra
             genes2ids[gene] = [set(),set()]
           genes2ids[gene][idx].add(int(id_))
-  #with open(pkl_file,"wb") as fout_:
-  #  pickle.dump(genes2ids, fout_)
-  return genes2ids
-
+  return (genes2ids,id2additional_ids)
 
 def main():
   if len(sys.argv) < 2:
     sys.stderr.write("need query\n")
     sys.exit(-1)
-  ie = IdentifierExtracter(hugo_genenamesF,gene_filter=re.compile(r'[\-\d]'),filter_stopwords=True)
-  genes2ids = load_gene2id_map(["pubmed_map.tsv","sra_map.tsv"])
   query = sys.argv[1]
-  process_query(ie,genes2ids,query)
+  print_additional_ids = False
+  if len(sys.argv) >= 3:
+    print_additional_ids = True;
+  ie = IdentifierExtracter(hugo_genenamesF,gene_filter=re.compile(r'[\-\d]'),filter_stopwords=True)
+  (genes2ids,id2additional_ids) = load_gene2id_map(["pubmed_map.tsv","sra_map.tsv"],print_additional_ids=print_additional_ids)
+  process_query(ie,genes2ids,id2additional_ids,query)
 
 if __name__ == '__main__':
   main() 
