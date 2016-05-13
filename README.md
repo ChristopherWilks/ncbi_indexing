@@ -26,6 +26,13 @@ via the webservices.
 To run you must have PyLucene 4.10.1 or higher
 (though this is the only version tested on).
 
+example query without specific field names:
+
+python query.py "query=cancer TP53&add_ids=1"
+
+Return format is (TAB delimited where spaces are):
+<PMID|EXPERIMENT_accession> primary_id score [additional_ids/accessions/genenames]
+
 example query user field names for both SRA (EXPERIMENT_TITLE) and 
 PubMed (TITLE) and a gene name (TP53):
 
