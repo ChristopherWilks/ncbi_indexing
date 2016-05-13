@@ -74,9 +74,9 @@ def parse_query(ie,query):
   values = []
   requirements = []
   if len(terms) == 1 and field_patt.search(terms[0]) is None:
-    fields = ['raw','raw']
-    values = [terms[0],terms[0]]
-    requirements = [BooleanClause.Occur.MUST,BooleanClause.Occur.MUST]
+    fields.append(['raw','raw'])
+    values.append([terms[0],terms[0]])
+    requirements.append([BooleanClause.Occur.MUST,BooleanClause.Occur.MUST])
   else:
     for term in terms:
       (field,val) = term.split(FIELD_VAL_DELIM)
