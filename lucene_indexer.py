@@ -1,5 +1,4 @@
 #!/bin/env python2.7
-#Embedded file name: /data2/cs466/final/lucene_indexer.py
 
 import sys
 import lucene
@@ -12,6 +11,7 @@ from org.apache.lucene.store import SimpleFSDirectory
 from org.apache.lucene.util import Version
 LUCENE_TYPES = {'i': IntField,'s': StringField,'t': TextField}
 
+#based on http://graus.nu/blog/pylucene-4-0-in-60-seconds-tutorial/
 class LuceneIndexer:
 
     def __init__(self, path_to_save):
