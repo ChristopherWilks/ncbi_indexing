@@ -7,14 +7,19 @@ use URI::Escape;
 
 my $MAX_INT=(2^32)-1;
 my $RUN_TIME_THRESHOLD=10; #seconds;
-my $DELAY=1; #3 seconds for querying NCBI
+my $DELAY=0.5; #3 seconds for querying NCBI
 my $ID_MODE=1;
 my $ABSTRACTS_MODE=2;
+my $SUMMARIES_MODE=3;
+
 
 #general eutils settings, can be overriden in specific functions
 my $eutils='http://eutils.ncbi.nlm.nih.gov/entrez/eutils';
 my $esearch = "$eutils/esearch.fcgi";
 my $efetch = "$eutils/efetch.fcgi";
+my $esummary = "$eutils/esummary.fcgi";
+
+my %mode2endpoint=(2=>$efetch,3=>$esummary);
 
 my $tool='JHUPubMedIndexer';
 my $email='chris.wilks@jhu.edu';
@@ -22,13 +27,16 @@ my $email='chris.wilks@jhu.edu';
 my $retmode = 'json';
 my $database = 'pubmed';
 #use as retmax
-my $fetch_max = 10000;
+
 
 my $FORCE_RUN;
 
-my $MODE=shift; #1=IDs, 2=abstracts
+my $MODE=shift; #1=IDs, 2=abstracts, 3=summaries
 $MODE=1 if(!$MODE);
 $FORCE_RUN=shift;
+
+my $fetch_max=10000;
+$fetch_max = 500 if($MODE == $SUMMARIES_MODE);
 
 main();
 
@@ -117,20 +125,24 @@ sub do_esearch
   delete $ep->{"usehistory"};
   $ep->{"WebEnv"}=$r->{"webenv"};
   $ep->{"query_key"}=$r->{"querykey"};
-  $ep->{"rettype"}="abstract" if($MODE==$ABSTRACTS_MODE);
+  $ep->{"rettype"}="abstract" if($MODE==$ABSTRACTS_MODE || $MODE==$SUMMARIES_MODE);
   
  
   #grab the rest of the IDs
   #my $fetch_size = $fetch_max; 
   my $fetch_size = 0;
-  for(my $i=$fetch_max; $i < $count; $i+=$fetch_size)
+  #for(my $i=$fetch_max; $i < $count; $i+=$fetch_size)
+  for(my $i=0; $i < $count; $i+=$fetch_size)
   {
     sleep($DELAY);
     $ep->{"retstart"}=$i;
-    $url = $efetch."?".(build_url($ep));
-    logit("getting $url $i/$count\n");
-    $output = get($url);
-    parse_output($output,\@results);
+    logit("getting $i/$count\n");
+    my $endpoint = $mode2endpoint{$MODE};
+    my $output = retrieve_records($ep,$endpoint);
+    parse_output($output,undef,\@results);
+    #my $esummary_output = retrieve_records($ep,$esummary);
+    #my $efetch_output = retrieve_records($ep,$efetch);
+    #parse_output($efetch_output,$esummary_output,\@results);
    
     #use fetch_size so we don't go over count with our step
     $fetch_size = $count-$fetch_max;
@@ -139,13 +151,26 @@ sub do_esearch
   return ($count,\@ids);
 }
 
+sub retrieve_records
+{
+  my $ep = shift;
+  my $endpoint = shift;
+
+  my $newurl = build_url($ep);
+  my $url = $endpoint."?".$newurl;
+  logit("running retrieve_records $url\n");
+  return get($url);
+}
+   
 sub parse_output
 {
   my $output = shift;
+  #my $es_output = shift;
   my $results = shift;
    
-  if($MODE==$ABSTRACTS_MODE)
+  if($MODE==$ABSTRACTS_MODE || $MODE==$SUMMARIES_MODE)
   {
+    #parse_abstracts($ef_output,$es_output,$results);
     parse_abstracts($output,$results);
     return;
   }  
@@ -159,6 +184,7 @@ sub parse_abstracts
   my $output = shift;
   my $results = shift;
  
+  #print STDERR "INFO:\n$es_output\nABSTRACT:\n$ef_output\n";
   print STDERR "$output\n";
 }      
 
