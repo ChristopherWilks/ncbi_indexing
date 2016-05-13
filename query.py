@@ -47,6 +47,7 @@ ssearcher = IndexSearcher(sra)
 NUM_TO_RETRIEVE = 100
 hugo_genenamesF = 'refFlat.hg38.txt.sorted'
 
+#adapted from previous projects
 def search_lucene(fields_,terms_,requirements_,searcher,index=0):
   terms = []
   fields = []
@@ -111,6 +112,7 @@ def get_ids_by_genenames(genes2ids,genes):
     except KeyError, ke:
       continue 
   #map SRX ids back to their full id for matching
+  pm_ids = set(map(str,pm_ids))
   sra_ids = set(map(lambda z: "SRX%s" % z,sra_ids))
   return (pm_ids,sra_ids)
 
