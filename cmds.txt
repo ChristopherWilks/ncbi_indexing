@@ -1,0 +1,65 @@
+#pubmed db info
+curl "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/einfo.fcgi?db=pubmed&retmode=json" -o pubmed.einfo
+
+
+curl "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=science%5bjournal%5d+AND+breast+cancer+AND+2008%5bpdat%5d&retmode=json"
+
+
+http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=science%5bjournal%5d+AND+breast+cancer+AND+2008%5bpdat%5d&retmode=json&retmax=1000000000
+
+
+#get abstracts
+http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=text&rettype=abstract&id=25081398
+
+#summaries
+http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&rettype=abstract&id=25081398I
+
+
+#sra search
+curl "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=sra&term=human%5BAll%20Fields%5D&retmode=json&retmax=10000&usehistory=y" -o search_sra
+
+curl "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=sra&WebEnv=NCID_1_28907757_130.14.22.215_9001_1462037673_1478038500_0MetA0_S_MegaStore_F_1&query_key=1&retmode=json&retmax=10000" -o efetch_sra
+
+#15 million retrieval
+perl retrieve_pubmed_docs.pl 2 1 2>&1 1> run_human_full | gzip > human_full.gz
+
+#in sra/
+perl ../retrieve_pubmed_docs.pl.new 3 sra 1 > ../run.sra 2>&1
+
+#parse abstracts and insert into Lucene index
+python parse_abstracts.py human_full.gz > parse_human_full.run2 2> parse_human_full.err2 
+
+#parse out gene names and SRA accessions from pubmed abstracts
+python parse_abstracts.py.new ./human_full.gz 2 > pubmed_genes_sra_accessions.tsv
+
+#basic search
+python query.py "EXPERIMENT_TITLE::lung cancer;;TITLE::Liver Damage"
+
+(python)cwilks@stingray:/data2/cs466/ncbi_indexing$ python query.py "EXPERIMENT_TITLE::lung cancer;;TITLE::Liver Damage"
+Running query index 0: lung cancer,Liver Damage in raw,TITLE restricted to +,+
+Running query index 1: lung cancer,Liver Damage in EXPERIMENT_TITLE,raw restricted to +,+
+results: 614 in pubmed; 27 in sra
+
+
+python query.py "EXPERIMENT_TITLE::lung cancer TP53;;TITLE::Liver Damage"
+
+python query.py "EXPERIMENT_TITLE::cancer TP53;;TITLE::cancer TP53"
+curl "http://stingray.cs.jhu.edu:8090/cs466/bioir?EXPERIMENT_TITLE::cancer TP53;;TITLE::cancer TP53"
+
+recs <- entrez_summary(db="pubmed", id=c(20203609, 20203610))
+sapply(rec, "[[", "PmcRefCount")
+query = urllib.unquote(query)
+
+curl "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=human%5BAll%20Fields%5D&retmode=json&retmax=10&usehistory=y" -o search_sra
+
+curl "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&WebEnv=NCID_1_4016978_130.14.22.215_9001_1463077615_1327990709_0MetA0_S_MegaStore_F_1&query_key=1&retmode=text&retstart=10&rettype=abstracts&retmax=10" -o efetch_sra2
+
+curl "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&WebEnv=NCID_1_4016978_130.14.22.215_9001_1463077615_1327990709_0MetA0_S_MegaStore_F_1&query_key=1&retmode=json&retstart=10&rettype=abstracts&retmax=10" -o esummary_sra2
+
+
+#compare pmids
+cat sra.parsed.tsv.4th | perl -ne 'chomp; $s=$_; next if($s=~/^$/); print "$s\n";' > sra.parsed.tsv.4th.noempties
+cut -f 2,5 sra.parsed.tsv.4th.noempties | perl -ne 'chomp; $s=$_; next if($s=~/\t$/); print "$s\n";' > sra.parsed.tsv.4th.noempties.srx2pmids
+cut -f 1 sra.parsed.tsv.4th.noempties.srx2pmids | sort -u > sra.parsed.tsv.4th.noempties.srx2pmids.uniq_srx
+cut -f 2 sra.parsed.tsv.4th.noempties.srx2pmids | perl -ne 'chomp; @f=split(/;/,$_); for $x (@f) { print "$x\n";}' | sort -u > sra.parsed.tsv.4th.noempties.srx2pmids.uniq_pmid
+
