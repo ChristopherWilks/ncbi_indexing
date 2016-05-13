@@ -57,7 +57,7 @@ def search_lucene(fields_,terms_,requirements_,searcher,index=0):
     terms.append(x[index])
     fields.append(fields_[i][index])
     requirements.append(requirements_[i][index])
-  sys.stderr.write("Running query %s: (\"%s\") in fields (%s) with requirements (%s)\n" % (sym2name[index],"\",\"".join(terms),",".join(fields),",".join([sym2name[str(x)] for x in requirements])))
+  sys.stdout.write("Running query %s: (\"%s\") in fields (%s) with requirements (%s)\n" % (sym2name[index],"\",\"".join(terms),",".join(fields),",".join([sym2name[str(x)] for x in requirements])))
   query = MultiFieldQueryParser.parse(Version.LUCENE_4_10_1,terms,fields,requirements,analyzer2)
   return(terms,fields,requirements,searcher.search(query, NUM_TO_RETRIEVE))
 
@@ -161,7 +161,7 @@ def parse_results(primary_id_fields,results,searchers,id2additional_ids,id_filte
     additional_ids = ""
     if pid in id2additional_ids:
       additional_ids = id2additional_ids[pid]
-    sys.stdout.write("%s: %s %d %s\n" % (pfield,pid,scoreDoc.score,additional_ids))
+    sys.stdout.write("%s\t%s\t%d\t%s\n" % (pfield,pid,scoreDoc.score,additional_ids))
     #for f in fields:
     #  f_ = docu.get(f)
       #sys.stderr.write("%s\t%s\n" % (f,f_))
@@ -186,10 +186,10 @@ def load_gene2id_map(files):
         id_ = fields[ID_COL[idx]]
         if PRINT_ADDITIONAL_IDS and len(fields[ADD_IDS_START_COL[idx]]) > 0:
           id2additional_ids[str(id_)]="\t".join(fields[ADD_IDS_START_COL[idx]:])
+        genes = fields[GENE_COL[idx]].split(";")
         #if idx == SRA_IDX and len(id_) > 3:
           #avoid the redundancy of storing the full "SRX" prefix
         #  id_ = id_[3:]
-        genes = fields[GENE_COL[idx]].split(";")
         for gene in genes:
           if gene not in genes2ids:
             #pubmed,sra
