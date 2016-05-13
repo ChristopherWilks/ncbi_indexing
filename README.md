@@ -28,7 +28,13 @@ To run you must have PyLucene 4.10.1 or higher
 
 example query user field names for both SRA (EXPERIMENT_TITLE) and 
 PubMed (TITLE) and a gene name (TP53):
-python query.py "EXPERIMENT_TITLE::cancer TP53;;TITLE::cancer TP53"
+
+python query.py "query=EXPERIMENT_TITLE::cancer TP53;;TITLE::cancer TP53"
+
+if you want to see the full set of associated PMIDS/accessions/Genes for each
+primary ID returned, add the parameter "add_ids=1":
+
+python query.py "query=EXPERIMENT_TITLE::cancer TP53;;TITLE::cancer TP53&add_ids=1"
 
 
 retrieve_pubmed_docs.pl

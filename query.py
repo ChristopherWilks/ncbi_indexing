@@ -27,6 +27,7 @@ from org.apache.lucene.util import Version
 import parse_abstracts
 from IdentityExtractor import IdentifierExtracter
 
+PRINT_ADDITIONAL_IDS=False
 
 pubmed_field_set = set()
 [pubmed_field_set.add(x[0]) for x in parse_abstracts.HEADER]
@@ -112,8 +113,8 @@ def get_ids_by_genenames(genes2ids,genes):
     except KeyError, ke:
       continue 
   #map SRX ids back to their full id for matching
-  pm_ids = set(map(str,pm_ids))
-  sra_ids = set(map(lambda z: "SRX%s" % z,sra_ids))
+  #pm_ids = set(map(str,pm_ids))
+  #sra_ids = set(map(lambda z: "SRX%s" % z,sra_ids))
   return (pm_ids,sra_ids)
 
 def process_query(ie,genes2ids,id2additional_ids,query):
@@ -172,7 +173,7 @@ SRA_IDX=1
 ID_COL=[1,1]
 GENE_COL=[2,3]
 ADD_IDS_START_COL=[2,2]
-def load_gene2id_map(files,print_additional_ids=False):
+def load_gene2id_map(files):
   genes2ids = {}
   id2additional_ids = {}
   #for faster loading (serialized binary) look for pickled file
@@ -183,30 +184,40 @@ def load_gene2id_map(files,print_additional_ids=False):
         fields = line.rstrip('\n').split("\t")
         #print("%d %s" % (idx,line))
         id_ = fields[ID_COL[idx]]
-        if print_additional_ids and len(fields[ADD_IDS_START_COL[idx]]) > 0:
+        if PRINT_ADDITIONAL_IDS and len(fields[ADD_IDS_START_COL[idx]]) > 0:
           id2additional_ids[str(id_)]="\t".join(fields[ADD_IDS_START_COL[idx]:])
-        if idx == SRA_IDX and len(id_) > 3:
+        #if idx == SRA_IDX and len(id_) > 3:
           #avoid the redundancy of storing the full "SRX" prefix
-          id_ = id_[3:]
+        #  id_ = id_[3:]
         genes = fields[GENE_COL[idx]].split(";")
         for gene in genes:
           if gene not in genes2ids:
             #pubmed,sra
             genes2ids[gene] = [set(),set()]
-          genes2ids[gene][idx].add(int(id_))
+          #genes2ids[gene][idx].add(int(id_))
+          genes2ids[gene][idx].add(id_)
   return (genes2ids,id2additional_ids)
 
+PARAM_DELIM='&'
 def main():
+  global PRINT_ADDITIONAL_IDS
   if len(sys.argv) < 2:
     sys.stderr.write("need query\n")
     sys.exit(-1)
   query = sys.argv[1]
-  print_additional_ids = False
-  if len(sys.argv) >= 3:
-    print_additional_ids = True;
+  parameters = {}
+  def pquery(x):
+    (x1,x2)=x.split('=')
+    parameters[x1]=x2
+  map(pquery,query.split(PARAM_DELIM))
+  if 'query' not in parameters or len(parameters['query']) < 1:
+    sys.stderr.write("MUST SUBMIT A QUERY, e.g. query=TP53\n")
+    sys.exit(-1)
+  if 'add_ids' in parameters and parameters['add_ids']=="1":
+    PRINT_ADDITIONAL_IDS=True 
   ie = IdentifierExtracter(hugo_genenamesF,gene_filter=re.compile(r'[\-\d]'),filter_stopwords=True)
-  (genes2ids,id2additional_ids) = load_gene2id_map(["pubmed_map.tsv","sra_map.tsv"],print_additional_ids=print_additional_ids)
-  process_query(ie,genes2ids,id2additional_ids,query)
+  (genes2ids,id2additional_ids) = load_gene2id_map(["pubmed_map.tsv","sra_map.tsv"])
+  process_query(ie,genes2ids,id2additional_ids,parameters['query'])
 
 if __name__ == '__main__':
   main() 
