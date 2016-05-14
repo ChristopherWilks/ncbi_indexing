@@ -49,6 +49,10 @@ curl "http://stingray.cs.jhu.edu:8090/cs466/bioir?query=EXPERIMENT_TITLE::cancer
 
 retrieve_pubmed_docs.pl
 -----------------------
+To run (abstracts mode):
+
+perl retrieve_pubmed_docs.pl 2 1 2>&1 1> run.status | gzip > pubmed_abstracts.gz
+
 Main script to interface with NCBI EUtils webservices for retrieving 
 both PubMed abstracts/summaries and SRA metadata.  
 Essentially this is my version of the the web spider/gatherer.  
@@ -69,6 +73,10 @@ vs. just an orthogonal, explicit approach).
 
 parse_abstracts.py
 ------------------
+To run:
+
+python parse_abstracts.py pubmed_abstracts.gz > pubmed_map.tsv
+
 Parses PubMed abstracts from their multi-line text format into
 individual Lucene fields (JOURNAL, TITLE, AUTHORS, etc...).  Also
 leverages the IdentityExtractor module (above) to extract genes and
@@ -78,6 +86,11 @@ PMID<->GENE NAME(s)<->SRA ACCESSION(s) mapping which is used by query.py.
 
 parse_sra_xml.py
 ----------------
+To run (must be in a directory which has one or more gzipped
+files containing raw SRA XML metadata on single lines):
+
+python parse_sra_xml.py > sra_map.tsv
+
 Parses SRA XML data downloaded in bulk and compressed in one or more
 gzipped files in the current directory. Utilizes IdentityExtractor.py
 to parse out gene names, additional SRA accessions, and PubMed IDs.
