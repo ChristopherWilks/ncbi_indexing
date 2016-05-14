@@ -28,6 +28,7 @@ import parse_abstracts
 from IdentityExtractor import IdentifierExtracter
 
 PRINT_ADDITIONAL_IDS=False
+RETRIEVE_FULL=False
 
 pubmed_field_set = set()
 [pubmed_field_set.add(x[0]) for x in parse_abstracts.HEADER]
@@ -134,8 +135,6 @@ def process_query(ie,genes2ids,id2additional_ids,query):
   parse_results(['PMID','EXPERIMENT_accession'],[presults,sresults],[psearcher,ssearcher],id2additional_ids,id_filters=[pubmed_ids,sra_ids])
 
 
-#def relevance_sort(scoreDocs,primary_id_field,searcher,id_filter):
-
 ID_BOOST=1000
 def score_results_for_id(result,searcher,primary_id_field,id_filter,final_results,idx):
   for scoreDoc in result.scoreDocs:
@@ -155,13 +154,19 @@ def parse_results(primary_id_fields,results,searchers,id2additional_ids,id_filte
     scoreDoc = sdoc[1]
     pfield = primary_id_fields[idx]
     pid = searchers[idx].doc(scoreDoc.doc).get(pfield)
+    full_doc = None
+    if RETRIEVE_FULL:
+      full_doc = searchers[idx].doc(scoreDoc.doc).get('raw')
     have_gene = False
     #if scoreDoc.score >= 1000:
     #  have_gene = True
     additional_ids = ""
     if pid in id2additional_ids:
       additional_ids = id2additional_ids[pid]
-    sys.stdout.write("%s\t%s\t%d\t%s\n" % (pfield,pid,scoreDoc.score,additional_ids))
+    if RETRIEVE_FULL:
+      sys.stdout.write("%s\t%s\t%d\t%s\t%s\n".encode('utf-8') % (pfield,pid,scoreDoc.score,additional_ids,full_doc))
+    else:
+      sys.stdout.write("%s\t%s\t%d\t%s\n" % (pfield,pid,scoreDoc.score,additional_ids))
     #for f in fields:
     #  f_ = docu.get(f)
       #sys.stderr.write("%s\t%s\n" % (f,f_))
@@ -201,6 +206,7 @@ def load_gene2id_map(files):
 PARAM_DELIM='&'
 def main():
   global PRINT_ADDITIONAL_IDS
+  global RETRIEVE_FULL
   if len(sys.argv) < 2:
     sys.stderr.write("need query\n")
     sys.exit(-1)
@@ -215,6 +221,8 @@ def main():
     sys.exit(-1)
   if 'add_ids' in parameters and parameters['add_ids']=="1":
     PRINT_ADDITIONAL_IDS=True 
+  if 'full' in parameters and parameters['full']=="1":
+    RETRIEVE_FULL=True 
   ie = IdentifierExtracter(hugo_genenamesF,gene_filter=re.compile(r'[\-\d]'),filter_stopwords=True)
   (genes2ids,id2additional_ids) = load_gene2id_map(["pubmed_map.tsv","sra_map.tsv"])
   process_query(ie,genes2ids,id2additional_ids,parameters['query'])

@@ -29,17 +29,23 @@ To run you must have PyLucene 4.10.1 or higher
 The following examples are provided in the accompanying shell script:
 test_queries.sh
 
-example query without specific field names:
+example query without specific field names but with additional IDs:
 
 python query.py "query=cancer TP53&add_ids=1"
+
 
 However, given the potential difficulty in setting up a local instance,
 I suggest using the webservice version (same query interface) instead:
 
 curl "http://stingray.cs.jhu.edu:8090/cs466/bioir?query=cancer%20TP53&add_ids=1" -o cancer.tsv
 
+
 Return format is (TAB delimited where spaces are):
-<PMID|EXPERIMENT_accession> primary_id score [additional_ids/accessions/genenames]
+<PMID|EXPERIMENT_accession> primary_id score [additional_ids/accessions/genenames] [full (raw) doc]
+
+To retrieve the full docs along side the ids add a "full=1" to the query
+
+curl "http://stingray.cs.jhu.edu:8090/cs466/bioir?query=cancer%20TP53&add_ids=1&full=1" -o cancer_full.tsv
 
 example query user field names for both SRA (EXPERIMENT_TITLE) and 
 PubMed (TITLE) and a gene name (TP53) but without the associated PMIDS/accessions/Genes:
