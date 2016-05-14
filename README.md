@@ -47,6 +47,11 @@ To retrieve the full docs along side the ids add a "full=1" to the query
 
 curl "http://stingray.cs.jhu.edu:8090/cs466/bioir?query=cancer%20TP53&add_ids=1&full=1" -o cancer_full.tsv
 
+Also, the current limit to retrieve from Lucene is 100 records per database (so 200 max)
+this can be changed with adding the parameter "limit=X":
+
+curl "http://stingray.cs.jhu.edu:8090/cs466/bioir?query=cancer%20TP53&add_ids=1&limit=1000" -o cancer1k.tsv
+
 example query user field names for both SRA (EXPERIMENT_TITLE) and 
 PubMed (TITLE) and a gene name (TP53) but without the associated PMIDS/accessions/Genes:
 

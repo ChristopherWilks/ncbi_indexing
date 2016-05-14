@@ -207,6 +207,7 @@ PARAM_DELIM='&'
 def main():
   global PRINT_ADDITIONAL_IDS
   global RETRIEVE_FULL
+  global NUM_TO_RETRIEVE
   if len(sys.argv) < 2:
     sys.stderr.write("need query\n")
     sys.exit(-1)
@@ -223,6 +224,8 @@ def main():
     PRINT_ADDITIONAL_IDS=True 
   if 'full' in parameters and parameters['full']=="1":
     RETRIEVE_FULL=True 
+  if 'limit' in parameters:
+    NUM_TO_RETRIEVE=int(parameters['limit'])
   ie = IdentifierExtracter(hugo_genenamesF,gene_filter=re.compile(r'[\-\d]'),filter_stopwords=True)
   (genes2ids,id2additional_ids) = load_gene2id_map(["pubmed_map.tsv","sra_map.tsv"])
   process_query(ie,genes2ids,id2additional_ids,parameters['query'])
